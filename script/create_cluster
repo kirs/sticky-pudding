@@ -1,0 +1,135 @@
+#!/usr/bin/env ruby
+
+# The author of the script is @brandur. Copied from:
+# https://github.com/brandur/rocket-rides-scalable
+
+#
+# Script that initializes and runs a Postgres primary database with a number of
+# replica clusters that stream from it.
+#
+# It creates DATA_DIR directory in the current working directory, and it's
+# re-created at the beginning of every run (it is IMPORTANT to note that all
+# data is lost from this directory between runs so this script should only be
+# used for purely ephemeral purposes like testing).
+#
+# POSTGRES_PORT specifies the port for the started primary to run on. Replicas
+# will get port numbers assigned based off this port and their replica number.
+# So for example, if POSTGRES_PORT is 5433, the primary will get 5433, the
+# first replica will get 5434, the second 5435, the third 5436, etc.
+#
+
+DATA_DIR = ENV["DATA_DIR"] || abort("need DATA_DIR")
+NUM_REPLICAS = Integer(ENV["NUM_REPLICAS"] || abort("need NUM_REPLICAS"))
+POSTGRES_PORT = Integer(ENV["POSTGRES_PORT"] || abort("need POSTGRES_PORT"))
+
+# used to find a default Postgrer user
+USER = ENV["USER"] || abort("need USER")
+
+def print_status(message)
+  puts "=== #{message}"
+end
+
+#
+# clean up
+#
+
+print_status("Removing #{DATA_DIR}")
+`rm -rf #{DATA_DIR}`
+
+#
+# initialize data directories
+#
+
+print_status("Initializing data directory for primary")
+`initdb -D #{DATA_DIR}/primary/`
+
+#
+# configure primary
+#
+
+print_status("Configuring primary")
+
+# Configures authentication around replication. We allow permission for our
+# user to access replication for both `local` (for use with `pg_basebackup`)
+# and then also on IPv4/IPv6 so that we can later connect to the database over
+# its other network interfaces.
+File.open("#{DATA_DIR}/primary/pg_hba.conf", mode="a") do |f|
+  f << <<~eos
+    local   replication     #{USER}                                trust
+    host    replication     #{USER}        127.0.0.1/32            trust
+    host    replication     #{USER}        ::1/128                 trust
+  eos
+end
+
+File.open("#{DATA_DIR}/primary/postgresql.conf", mode="a") do |f|
+  f << <<~eos
+    max_connections=100
+    max_wal_senders=99 # must be less than max_connections
+    port=#{POSTGRES_PORT}
+    wal_level=hot_standby
+
+    # The primary could remove WAL between a base backup and when a replica
+    # comes online so that the replica is stuck never able to catch up. This
+    # removes any possibility of raciness by keeping a couple 16 MB segments
+    # around. There's so little activity on this toy database that in practice
+    # this will be more than enough.
+    wal_keep_segments=2
+  eos
+end
+
+#
+# start primary
+#
+
+print_status("Starting primary")
+primary_pid = Process.spawn("postgres -D #{DATA_DIR}/primary/")
+
+print_status("Waiting a short moment for it to come up")
+sleep(1)
+
+#
+# bring up replicas
+#
+
+replica_pids = []
+
+NUM_REPLICAS.times do |i|
+
+  #
+  # create base backup for replica
+  #
+
+  print_status("Initializing data directory for replica #{i}")
+  `pg_basebackup -p #{POSTGRES_PORT} --wal-method=stream -D #{DATA_DIR}/replica#{i}/`
+
+  #
+  # configure replica
+  #
+
+  print_status("Configuring replica #{i}")
+
+  File.open("#{DATA_DIR}/replica#{i}/postgresql.conf", mode="a") do |f|
+    f << <<~eos
+      port=#{POSTGRES_PORT + 1 + i}
+      shared_buffers=500MB
+      hot_standby=on
+      hot_standby_feedback=on
+    eos
+  end
+
+  File.open("#{DATA_DIR}/replica#{i}/recovery.conf", mode="a") do |f|
+    f << <<~eos
+      standby_mode=on
+      primary_conninfo='host=127.0.0.1 port=#{POSTGRES_PORT} user=#{USER}'
+    eos
+  end
+
+  #
+  # start replica
+  #
+
+  print_status("Starting replica #{i}")
+  replica_pids << Process.spawn("postgres -D #{DATA_DIR}/replica#{i}/")
+end
+
+Process.wait primary_pid

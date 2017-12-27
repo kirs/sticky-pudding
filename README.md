@@ -1,5 +1,7 @@
 # Sticky Pudding
 
+<img width="360" src="https://user-images.githubusercontent.com/522155/34395849-c8fcbfb8-eb5b-11e7-80a1-52d8e82d4128.jpg">
+
 Sticky Pudding is an app that demonstrates how to implement the Sticky Writer pattern in 50 lines of code.
 It's based on PostgreSQL but nothing stops it from working with MySQL.
 

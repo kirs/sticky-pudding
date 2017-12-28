@@ -5,13 +5,12 @@ require "sinatra/cookies"
 require "pg"
 require "sequel"
 
-NUM_REPLICAS  = Integer(ENV["NUM_REPLICAS"]  || abort("need NUM_REPLICAS"))
 POSTGRES_PORT = Integer(ENV["POSTGRES_PORT"] || abort("need POSTGRES_PORT"))
 
 DB = Sequel.connect("postgres://localhost:#{POSTGRES_PORT}/sticky-pudding",
-  servers: Hash[NUM_REPLICAS.times.map { |i|
-    [:"replica#{i}", { port: POSTGRES_PORT + 1 + i }]
-  }]
+  servers: {
+    replica: { port: POSTGRES_PORT + 1 }
+  }
 )
 
 class Product < Sequel::Model
@@ -43,8 +42,7 @@ class App < Sinatra::Base
     if cookies[:sticky_writer]
       @target_db_server = :default
     else
-      replica_names = DB.servers[1..-1]
-      @target_db_server = replica_names.sample
+      @target_db_server = :replica
     end
 
     $stdout.puts "Reading record #{id} from server '#{@target_db_server}'"

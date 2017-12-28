@@ -1,5 +1,5 @@
 <div style="background: #d5d500; padding: 3px;">
-  Querying: <%= @target_db_server %> server
+  Querying <strong><%= @target_db_server == :default ? "master" : "replica" %></strong>
 </div>
 
 <h1>Product: <%= @product.title %></h1>

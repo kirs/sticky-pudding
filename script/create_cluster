@@ -19,7 +19,6 @@
 #
 
 DATA_DIR = ENV["DATA_DIR"] || abort("need DATA_DIR")
-NUM_REPLICAS = Integer(ENV["NUM_REPLICAS"] || abort("need NUM_REPLICAS"))
 POSTGRES_PORT = Integer(ENV["POSTGRES_PORT"] || abort("need POSTGRES_PORT"))
 
 # used to find a default Postgrer user
@@ -88,48 +87,43 @@ print_status("Waiting a short moment for it to come up")
 sleep(1)
 
 #
-# bring up replicas
+# bring up replica
 #
 
-replica_pids = []
+#
+# create base backup for replica
+#
 
-NUM_REPLICAS.times do |i|
+print_status("Initializing data directory for replica")
+`pg_basebackup -p #{POSTGRES_PORT} --wal-method=stream -D #{DATA_DIR}/replica/`
 
-  #
-  # create base backup for replica
-  #
+#
+# configure replica
+#
 
-  print_status("Initializing data directory for replica #{i}")
-  `pg_basebackup -p #{POSTGRES_PORT} --wal-method=stream -D #{DATA_DIR}/replica#{i}/`
+print_status("Configuring replica")
 
-  #
-  # configure replica
-  #
-
-  print_status("Configuring replica #{i}")
-
-  File.open("#{DATA_DIR}/replica#{i}/postgresql.conf", mode="a") do |f|
-    f << <<~eos
-      port=#{POSTGRES_PORT + 1 + i}
-      shared_buffers=500MB
-      hot_standby=on
-      hot_standby_feedback=on
-    eos
-  end
-
-  File.open("#{DATA_DIR}/replica#{i}/recovery.conf", mode="a") do |f|
-    f << <<~eos
-      standby_mode=on
-      primary_conninfo='host=127.0.0.1 port=#{POSTGRES_PORT} user=#{USER}'
-    eos
-  end
-
-  #
-  # start replica
-  #
-
-  print_status("Starting replica #{i}")
-  replica_pids << Process.spawn("postgres -D #{DATA_DIR}/replica#{i}/")
+File.open("#{DATA_DIR}/replica/postgresql.conf", mode="a") do |f|
+  f << <<~eos
+    port=#{POSTGRES_PORT + 1}
+    shared_buffers=500MB
+    hot_standby=on
+    hot_standby_feedback=on
+  eos
 end
+
+File.open("#{DATA_DIR}/replica/recovery.conf", mode="a") do |f|
+  f << <<~eos
+    standby_mode=on
+    primary_conninfo='host=127.0.0.1 port=#{POSTGRES_PORT} user=#{USER}'
+  eos
+end
+
+#
+# start replica
+#
+
+print_status("Starting replica")
+Process.spawn("postgres -D #{DATA_DIR}/replica/")
 
 Process.wait primary_pid

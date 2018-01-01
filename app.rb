@@ -31,8 +31,7 @@ class App < Sinatra::Base
   post "/kittens" do
     DB.transaction do
       record = Kitten.create(
-        title: params["kitten"]["title"],
-        price: params["kitten"]["price"]
+        name: params["kitten"]["name"],
       )
 
       response.set_cookie(:sticky_writer, value: "1", expires: Time.now + STICKY_TIMEOUT)

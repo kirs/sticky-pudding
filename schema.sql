@@ -1,6 +1,6 @@
 BEGIN;
 
-CREATE TABLE products (
+CREATE TABLE kittens (
   id BIGSERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
   price money NOT NULL

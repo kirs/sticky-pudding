@@ -13,7 +13,7 @@ DB = Sequel.connect("postgres://localhost:#{POSTGRES_PORT}/sticky-pudding",
   }
 )
 
-class Product < Sequel::Model
+class Kitten < Sequel::Model
 end
 
 class App < Sinatra::Base
@@ -26,19 +26,19 @@ class App < Sinatra::Base
     erb :new
   end
 
-  post "/products" do
+  post "/kittens" do
     DB.transaction do
-      record = Product.create(
-        title: params["product"]["title"],
-        price: params["product"]["price"]
+      record = Kitten.create(
+        title: params["kitten"]["title"],
+        price: params["kitten"]["price"]
       )
 
       response.set_cookie(:sticky_writer, value: "1", expires: Time.now + 10)
-      redirect "/products/#{record.id}"
+      redirect "/kittens/#{record.id}"
     end
   end
 
-  get "/products/:id" do |id|
+  get "/kittens/:id" do |id|
     if cookies[:sticky_writer]
       @target_db_server = :default
     else
@@ -47,7 +47,7 @@ class App < Sinatra::Base
 
     $stdout.puts "Reading record #{id} from server '#{@target_db_server}'"
 
-    @product = Product.server(@target_db_server).first(id: id)
+    @kitten = Kitten.server(@target_db_server).first(id: id)
     erb :show
   end
 end

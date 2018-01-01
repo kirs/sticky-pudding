@@ -19,7 +19,7 @@ end
 class App < Sinatra::Base
   helpers Sinatra::Cookies
 
-  STICKY_TIMEOUT = Time.now + 10 # in seconds
+  STICKY_TIMEOUT = 10 # in seconds
 
   set :server, %w[puma]
   set :show_exceptions, true
@@ -35,7 +35,7 @@ class App < Sinatra::Base
         price: params["kitten"]["price"]
       )
 
-      response.set_cookie(:sticky_writer, value: "1", expires: STICKY_TIMEOUT)
+      response.set_cookie(:sticky_writer, value: "1", expires: Time.now + STICKY_TIMEOUT)
       redirect "/kittens/#{record.id}"
     end
   end
